@@ -21,15 +21,16 @@ main(void)
 
   for(;;){
     printf(1, "init: starting sh\n");
+    sleep(50);
     pid = fork();
     if(pid < 0){
       printf(1, "init: fork failed\n");
-      exit(EXIT_STATUS);
+      exit(EXIT_STATUS_OK);
     }
     if(pid == 0){
       exec("sh", argv);
       printf(1, "init: exec sh failed\n");
-      exit(EXIT_STATUS);
+      exit(EXIT_STATUS_OK);
     }
     while((wpid=wait(0)) >= 0 && wpid != pid)
       printf(1, "zombie!\n");

@@ -13,13 +13,16 @@ main(int argc, char *argv[])
    if (argc > 1) {
       pid = atoi(argv[1]);
    }
+   printf(1, "Entered pid : %d\n", pid);
+
    if (pstat(pid,&p_stat) == -1) {
       printf(1,"BALAGAN! %s\n",argv[1]);
    } else {
+	 printf(1,"Process name : ");
      printf(1,p_stat.name);
      printf(1,"\nSize: %d\nNum of files: %d\nState value: %d\nPID: %d\n",p_stat.sz,p_stat.nofile,p_stat.state,pid);
 
    }
 
-   exit(0);
+   return 1;
 }

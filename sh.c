@@ -12,15 +12,19 @@
 #define BACK  5
 
 #define MAXARGS 10
-#define MAXJOBS 64
-#define FOREGROUND 1
-#define BACKGROUND 2
 
-struct job {
-	int jid;   // Job ID
-	int pid;   // Jobs PID
-	int fd;    // Jobs File Descriptor
-	int type;  // FG or BG
+
+struct job *getJob(int jobId);
+
+struct job{
+	int id;
+	struct job *nextjob;
+	struct jobprocess *headOfProcesses;
+};
+
+struct jobprocess{
+	int pid;
+	struct jobprocess *nextProcess;
 };
 
 struct cmd {
@@ -60,7 +64,6 @@ struct backcmd {
 };
 
 int fork1(void);  // Fork but panics on failure.
-int createJob(struct job *);
 void panic(char*);
 struct cmd *parsecmd(char*);
 
@@ -76,7 +79,7 @@ runcmd(struct cmd *cmd)
   struct redircmd *rcmd;
 
   if(cmd == 0)
-    exit(EXIT_STATUS);
+    exit(EXIT_STATUS_OK);
   
   switch(cmd->type){
   default:
@@ -85,7 +88,11 @@ runcmd(struct cmd *cmd)
   case EXEC:
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
-      exit(EXIT_STATUS);
+      exit(EXIT_STATUS_OK);
+	char pidBuff[sizeof(int)];
+	int pid = getpid();
+	strcpy(pidBuff, (char *) &pid);
+	write(3 ,pidBuff, sizeof(int));
     exec(ecmd->argv[0], ecmd->argv);
     printf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
@@ -95,7 +102,7 @@ runcmd(struct cmd *cmd)
     close(rcmd->fd);
     if(open(rcmd->file, rcmd->mode) < 0){
       printf(2, "open %s failed\n", rcmd->file);
-      exit(EXIT_STATUS);
+      exit(EXIT_STATUS_OK);
     }
     runcmd(rcmd->cmd);
     break;
@@ -134,11 +141,16 @@ runcmd(struct cmd *cmd)
     
   case BACK:
     bcmd = (struct backcmd*)cmd;
-    if(fork1() == 0)
-      runcmd(bcmd->cmd);
+    if(fork1() == 0){
+    	char pidBuff[sizeof(int)];
+    	int pid = getpid();
+    	strcpy(pidBuff, (char *) &pid);
+    	write(3 ,pidBuff, sizeof(int));
+    	runcmd(bcmd->cmd);
+    }
     break;
   }
-  exit(EXIT_STATUS);
+  exit(EXIT_STATUS_OK);
 }
 
 int
@@ -157,9 +169,10 @@ main(void)
 {
   static char buf[100];
   int fd;
-  int i;
-
-  struct job jobTable[MAXJOBS];
+  struct job *foregroungJob = 0;
+  struct job *lastBackgroundJob = 0;
+  struct job *backgroundJobsHead = 0;
+  int jobCount = 0;
   
   // Assumes three file descriptors open.
   while((fd = open("console", O_RDWR)) >= 0){
@@ -169,20 +182,10 @@ main(void)
     }
   }
 
+
+
   // Read and run input commands.
-  while((getcmd(buf, sizeof(buf)) >= 0)){
-  int found = 0;
-	  for (i=0; i<MAXJOBS; i++){
-		  if (jobTable[i].type == FOREGROUND){
-			  write(jobTable[i].fd,buf,sizeof(buf));
-			  printf(2, "FD2: %d\n",jobTable[i].fd);
-			  jobTable[i].type = BACKGROUND; // TODO - NEED TO ERASE IT AFTER IMPLEMENTING AUTOMATIC DELETE OF JOBS
-			  found = 1;
-			  break;
-		  }
-	  }
-	if (found == 1)
-		continue;
+  while(getcmd(buf, sizeof(buf)) >= 0){
 
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
       // Clumsy but will have to do for now.
@@ -193,58 +196,87 @@ main(void)
       continue;
     }
 
-	if ((i = createJob(jobTable)) < 0)
-		exit(EXIT_STATUS);   //TODO Change to ERROR
-	int p[2];
-	pipe(p);
-	jobTable[i].fd = p[1];
-	printf(2, "FD: %d\n",p[1]);
+    int jobOutput[2],jobInput[2];
+    if(pipe(jobOutput) < 0)
+      panic("jobOutput error");
+    if(pipe(jobInput) < 0)
+      panic("jobInput error");
 
-	struct cmd* cmd = parsecmd(buf);
 
-	if (cmd->type == BACK)
-		jobTable[i].type = BACKGROUND;
-	else
-		jobTable[i].type = FOREGROUND;
+    jobCount++;
+    struct job *newJob = getJob(jobCount);
+    struct cmd *newcmd = parsecmd(buf);
+	if(newcmd->type != BACK && foregroungJob != 0){
+		foregroungJob = newJob;
+		printf(1, "Foreground job set. JobId = %d\n", foregroungJob->id);
 
-    if(fork1() == 0)
-    {
-    	close(0);
-    	dup(p[0]);
-    	close(p[0]);
-    	close(p[1]);
-    	runcmd(cmd);
-    }
-    else{
-    	close(p[0]);
-    }
-    wait(0);
-  }
-  exit(EXIT_STATUS);
-}
-
-int
-createJob(struct job *jobTable){
-	int i;
-	for (i=0; i<MAXJOBS; i++){
-		if (jobTable[i].jid == 0) {
-			jobTable[i].jid = i+1;
-			jobTable[i].pid = getpid();
-			//printf(1,"PID: %d\n",jobTable[i].pid);
-			printf(1,"JID: %d\n",jobTable[i].jid);
-			jobTable[i].type = BACKGROUND;
-			return i;
+	}
+	else {
+		if(backgroundJobsHead == 0){
+			backgroundJobsHead = newJob;
+			lastBackgroundJob = newJob;
+		}
+		else {
+			lastBackgroundJob->nextjob = newJob;
+			lastBackgroundJob = newJob;
 		}
 	}
-	return -1;
+
+	if(fork1() == 0){
+
+      //close(1);
+	  dup(jobOutput[0]);
+	  close(jobOutput[0]);
+	  close(jobOutput[1]);
+
+	  close(0);
+	  dup(jobInput[1]);
+	  close(jobInput[0]);
+	  close(jobInput[1]);
+
+      runcmd(newcmd);
+    }
+
+	if (fork1() == 0){ // input redirecting
+		char *newbuf[256];
+		while(gets(buf, sizeof(buf)) >= 0 && foregroungJob == newJob){
+			printf(1, "Received INPUT = %s" , buf);
+			write(jobInput[0] , newbuf, sizeof(newbuf));
+			printf(2, "$ ");
+		 }
+		printf(1, "redirecting exit\n");
+		foregroungJob = 0;
+		exit(0);
+	}
+
+
+	char *pidBuf[4];
+	while (read(jobOutput[1] , pidBuf , sizeof(pidBuf)) > 0 ){
+		int recievedPid = (int)*pidBuf;
+		printf(1, "Received pid = %d\n" , recievedPid );
+	}
+    wait(0);
+  }
+  exit(EXIT_STATUS_OK);
 }
 
+struct job *getJob(int jobId){
+	  struct job *newJob;
+
+	  newJob = malloc(sizeof(*newJob));
+	  memset(newJob, 0, sizeof(*newJob));
+	  newJob->id = jobId;
+	  newJob->nextjob = 0;// NULL
+	  newJob->headOfProcesses = 0; //NULL
+
+	  return newJob;
+}
 
 void
 panic(char *s)
 {
   printf(2, "%s\n", s);
-  exit(EXIT_STATUS);
+  exit(EXIT_STATUS_OK);
 }
 
 int

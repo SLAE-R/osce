@@ -42,24 +42,24 @@ main(int argc, char *argv[])
   
   if(argc <= 1){
     printf(2, "usage: grep pattern [file ...]\n");
-    exit(EXIT_STATUS);
+    exit(EXIT_STATUS_OK);
   }
   pattern = argv[1];
   
   if(argc <= 2){
     grep(pattern, 0);
-    exit(EXIT_STATUS);
+    exit(EXIT_STATUS_OK);
   }
 
   for(i = 2; i < argc; i++){
     if((fd = open(argv[i], 0)) < 0){
       printf(1, "grep: cannot open %s\n", argv[i]);
-      exit(EXIT_STATUS);
+      exit(EXIT_STATUS_OK);
     }
     grep(pattern, fd);
     close(fd);
   }
-  exit(EXIT_STATUS);
+  exit(EXIT_STATUS_OK);
 }
 
 // Regexp matcher from Kernighan & Pike,

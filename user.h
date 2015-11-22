@@ -2,7 +2,7 @@ struct stat;
 struct rtcdate;
 struct procstat;
 
-#define EXIT_STATUS 1
+#define EXIT_STATUS_OK 1
 
 // system calls
 int fork(void);
