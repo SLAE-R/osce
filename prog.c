@@ -15,16 +15,16 @@ int main(int argc, char *argv[]){
 	int shouldRun = 1;
 	int index = 0;
 	while(shouldRun){
-		if (gets(buf, BUFFER_SIZE) > 0 && !isExit(buf)){
-			printf(0, "Entered argument from command line was : ");
+		if (read (0 , buf , BUFFER_SIZE) && !isExit(buf)){
+			printf(1, "Entered argument from command line was : ");
 			int length = findLenghtOfInput(buf);
 			for (index = 0; index < length; index++){
-				printf(0, "%c", buf[index]);
+				printf(1, "%c", buf[index]);
 			}
 		}
 		else {
 			shouldRun = 0;
-			printf(0, "Exiting prog ...\n");
+			printf(2, "Exiting prog ...\n");
 
 		}
 	}

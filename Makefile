@@ -175,7 +175,6 @@ UPROGS=\
 	_zombie\
 	_prog\
 	_check_pstat\
-	_jobs\
 	_backjob\
 	_t\
 
