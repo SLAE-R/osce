@@ -16,17 +16,6 @@
 #define FOREGROUND	1
 #define BACKGROUND	2
 
-
-struct job *getJob(int jobId , int inputFd, char* buf);
-struct jobprocess *getProcess(int pid);
-void addProcessToJob(struct job *job , int pid);
-struct job *clearJobList(struct job *head);
-struct jobprocess *clearZombieProcesses(struct jobprocess *head);
-struct job *findForegroundJob(struct job *head);
-struct job *findJobById(struct job *head , int pid);
-void printAllJobs(struct job * head);
-
-
 static char *states[] = {
 	  [UNUSED]    "UNUSED",
 	  [EMBRYO]    "EMBRYO",
@@ -49,6 +38,16 @@ struct jobprocess{
 	int pid;
 	struct jobprocess *nextProcess;
 };
+
+void deleteJobList(struct job* head);
+struct job *getJob(int jobId , int inputFd, char* buf);
+struct jobprocess *getProcess(int pid);
+void addProcessToJob(struct job *job , int pid);
+struct job *clearJobList(struct job *head);
+struct jobprocess *clearZombieProcesses(struct jobprocess *head);
+struct job *findForegroundJob(struct job *head);
+struct job *findJobById(struct job *head , int pid);
+void printAllJobs(struct job * head);
 
 struct cmd {
   int type;
@@ -183,7 +182,7 @@ runcmd(struct cmd *cmd , int fdToShell)
 int
 getcmd(char *buf, int nbuf)
 {
-  printf(2, "$ ");
+  //printf(2, "$ ");
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
   if(buf[0] == 0) // EOF
@@ -210,13 +209,14 @@ main(void)
   }
 
   // Read and run input commands.
+  printf(2, "$ ");
+
   while(getcmd(buf, sizeof(buf)) >= 0){
 	 jobsHead = clearJobList(jobsHead);
 	 foregroungJob = findForegroundJob(jobsHead);
 
 	if (foregroungJob != 0){
 		//TODO pass to pipe entered data
-		printf(1, "Received INPUT = %s" , buf);
 		write(foregroungJob->jobInFd , buf, strlen(buf));
 		continue;
 	}
@@ -227,11 +227,13 @@ main(void)
       buf[strlen(buf)-1] = 0;  // chop \n
       if(chdir(buf+3) < 0)
         printf(2, "cannot cd %s\n", buf+3);
+	  printf(2, "$ ");
       continue;
     }
 
     if(buf[0] == 'j' && buf[1] == 'o' && buf[2] == 'b' && buf[3] == 's'){
     	printAllJobs(jobsHead);
+    	printf(2, "$ ");
     	continue;
     }
 
@@ -240,11 +242,13 @@ main(void)
         int pid = atoi(buf + 3);
         struct job *findedJob = findJobById(jobsHead , pid);
         findedJob->type = FOREGROUND;
+        printf(2, "$ ");
     	continue;
     }
 
     if(buf[0] == 'f' && buf[1] == 'g'){
         jobsHead->type = FOREGROUND;
+        printf(2, "$ ");
     	continue;
     }
 
@@ -294,12 +298,40 @@ main(void)
 			addProcessToJob(newJob , recievedPid);
 		}
 		close(jobPids[0]);
+
 	}
+
+	if (newcmd->type == BACK)
+		  printf(2, "$ ");
+
 	//wait(0);
   }
+  deleteJobList(jobsHead);
   exit(EXIT_STATUS_OK);
 }
 
+
+void deleteJobList(struct job * head){
+	struct job* currentJob = head;
+	struct job* tempJob = 0;
+	if (head == 0) {
+		return;
+	}
+	while (currentJob!=0){
+		struct jobprocess* currentProc = currentJob->headOfProcesses;
+		struct jobprocess* tempProc = 0;
+		while (currentProc != 0 ){
+			tempProc = currentProc->nextProcess;
+			free(currentProc);
+			currentProc = tempProc;
+		}
+		tempJob = currentJob->nextjob;
+		free(currentJob->cmd);
+		free(currentJob);
+		currentJob = tempJob;
+	}
+	return;
+}
 
 void printAllJobs(struct job * head){
 	struct job* currentJob = head;
@@ -326,9 +358,6 @@ void addProcessToJob(struct job *job , int pid){
 	struct jobprocess *newProcess = getProcess(pid);
 	newProcess->nextProcess = job->headOfProcesses;
 	job->headOfProcesses = newProcess;
-
-	printf(1, "Added process id = %d to Job id = %d\n", newProcess->pid, job->id);
-
 }
 
 struct job *findJobById(struct job *head , int pid){
@@ -362,36 +391,22 @@ struct job *findForegroundJob(struct job *head){
 }
 
 struct job *clearJobList(struct job *head){
-	printf(1, "---->>>> Entering clearJobs\n");
-
 	if (head == 0){
 		return head;
 	}
 
 	struct job *currentJob = head;
 	struct job *newHead = 0;
-	struct job *foregroundJob = 0;
 
 	while (newHead == 0 && currentJob != 0){
 		struct job *temp = currentJob->nextjob;
 		currentJob->headOfProcesses = clearZombieProcesses(currentJob->headOfProcesses);
 		if (currentJob->headOfProcesses == 0){
-			printf(1, "deleting job id = %d\n", currentJob->id );
-
 			free(currentJob->cmd);
-			printf(1, "command deleted from head search\n" );
-
 			free(currentJob);
 		}
 		else {
 			newHead = currentJob;
-			printf(1, "new Head Jobs id = %d\n", newHead->id );
-
-			if (currentJob->type == FOREGROUND){
-				foregroundJob = currentJob;
-				printf(1, "Foreground job id = %d\n", foregroundJob->id);
-
-			}
 		}
 		currentJob = temp;
 	}
@@ -404,15 +419,8 @@ struct job *clearJobList(struct job *head){
 			currentJob->headOfProcesses = clearZombieProcesses(currentJob->headOfProcesses);
 			if (currentJob->headOfProcesses == 0){
 				prevJob->nextjob = currentJob->nextjob;
-
-				printf(1, "deleting job id = %d\n", currentJob->id );
-
 				free(currentJob->cmd);
-				printf(1, "command deleted\n" );
-
 				free(currentJob);
-				printf(1, "job deleted after command deleted\n" );
-
 				if (prevJob->nextjob != 0){
 					currentJob = prevJob->nextjob->nextjob;
 				}
@@ -423,11 +431,6 @@ struct job *clearJobList(struct job *head){
 			else {
 				prevJob = currentJob;
 				currentJob = currentJob->nextjob;
-				if (prevJob->type == FOREGROUND){
-					foregroundJob = prevJob;
-					printf(1, "Foreground job id = %d\n", foregroundJob->id);
-
-				}
 			}
 		}
 	}
@@ -448,14 +451,11 @@ struct jobprocess *clearZombieProcesses(struct jobprocess *head){
 		struct procstat stat;
 
 		if (pstat(currentProcess->pid , &stat) < 0 || stat.state == ZOMBIE){
-			printf(1, "deleting process id = %d\n", currentProcess->pid );
 			free(currentProcess);
 		}
 		else {
 			newHead = currentProcess;
 		}
-		printf(1, "current = temp ,  pointer to temp = %p\n", temp );
-
 		currentProcess = temp;
 	}
 
@@ -468,9 +468,6 @@ struct jobprocess *clearZombieProcesses(struct jobprocess *head){
 
 			if (pstat(currentProcess->pid , &stat) < 0 || stat.state == ZOMBIE){
 				prevProcess->nextProcess = currentProcess->nextProcess;
-
-				printf(1, " --- deleting process id = %d\n", currentProcess->pid );
-
 				free(currentProcess);
 				currentProcess = prevProcess->nextProcess->nextProcess;
 			}
@@ -494,11 +491,8 @@ struct job *getJob(int jobId , int inputFd, char* buf){
 	newJob->headOfProcesses = 0; //NULL
 	newJob->jobInFd = inputFd ;
 	newJob->type = FOREGROUND;
-
 	newJob->cmd = malloc(strlen(buf));
 	strcpy(newJob->cmd, buf);
-	printf(1, "Created new job id = %d\n", newJob->id);
-
 	return newJob;
 }
 
