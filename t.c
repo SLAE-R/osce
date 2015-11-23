@@ -10,5 +10,6 @@ int main() {
 	if (fork()==0) {
 		exec(argv[0], argv);
 	}
+	wait(0);
 	return 0;
 }

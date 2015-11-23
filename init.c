@@ -21,7 +21,7 @@ main(void)
 
   for(;;){
     printf(1, "init: starting sh\n");
-    sleep(50);
+    sleep(10);
     pid = fork();
     if(pid < 0){
       printf(1, "init: fork failed\n");
@@ -33,6 +33,6 @@ main(void)
       exit(EXIT_STATUS_OK);
     }
     while((wpid=wait(0)) >= 0 && wpid != pid)
-      printf(1, "zombie!\n");
+      printf(1, "zombie! pid =%d\n", pid);
   }
 }

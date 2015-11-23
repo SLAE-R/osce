@@ -120,6 +120,7 @@ runcmd(struct cmd *cmd , int fdToShell)
 
 		 exec(ecmd->argv[0], ecmd->argv);
 		 printf(2, "exec %s failed\n", ecmd->argv[0]);
+		 exit(EXIT_STATUS_OK);
 	  }
 	  close(fdToShell);
 	  wait(0);
@@ -171,11 +172,11 @@ runcmd(struct cmd *cmd , int fdToShell)
 
    case BACK:
      bcmd = (struct backcmd*)cmd;
-//     if (fork1() == 0)
+	  printf(2, "$ ");
     	 runcmd(bcmd->cmd,fdToShell);
-//     close(fdToShell);
      break;
   }
+  printf(2, "$ ");
   exit(EXIT_STATUS_OK);
 }
 
@@ -242,13 +243,11 @@ main(void)
         int pid = atoi(buf + 3);
         struct job *findedJob = findJobById(jobsHead , pid);
         findedJob->type = FOREGROUND;
-        printf(2, "$ ");
     	continue;
     }
 
     if(buf[0] == 'f' && buf[1] == 'g'){
         jobsHead->type = FOREGROUND;
-        printf(2, "$ ");
     	continue;
     }
 
@@ -261,11 +260,11 @@ main(void)
 	  panic("jobInput error");
 
 	jobCount++;
-	struct job *newJob = getJob(jobCount , jobInput[1], buf);
+	struct job *newJob = getJob(jobCount , jobInput[1], buf); // by default FOREGROUND sJOB
 	struct cmd *newcmd = parsecmd(buf);
 
 	if (newcmd->type == BACK){
-		newJob->type = BACKGROUND;
+		newJob->type = BACKGROUND; // change to background if it's so
 	}
 
 
@@ -301,8 +300,6 @@ main(void)
 
 	}
 
-	if (newcmd->type == BACK)
-		  printf(2, "$ ");
 
 	//wait(0);
   }
